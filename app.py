@@ -30,8 +30,14 @@ def create_pdf(report_data, title="OSINT Recherche Bericht"):
         else:
             pdf.multi_cell(0, 8, txt=str(data))
         pdf.ln(5)
-    
-    return pdf.output(dest='S').encode('latin-1', 'replace')
+
+    # FIX: pdf.output(dest='S') gibt in fpdf2 bereits bytes zurück.
+    # Kein .encode() nötig – direktes Zurückgeben des bytes-Objekts.
+    result = pdf.output(dest='S')
+    if isinstance(result, bytes):
+        return result
+    # Fallback für ältere fpdf-Versionen, die noch str zurückgeben
+    return result.encode('latin-1', 'replace')
 
 # --- SEITEN KONFIGURATION ---
 st.set_page_config(page_title="Manus OSINT Pro Dashboard", page_icon="🔍", layout="wide")
@@ -45,7 +51,7 @@ def check_password():
         st.title("🔒 Zugriff geschützt")
         pwd = st.text_input("Bitte Passwort eingeben:", type="password")
         if st.button("Einloggen"):
-            if pwd == "osint123": # Standard-Passwort
+            if pwd == "31nichoy":
                 st.session_state.password_correct = True
                 st.rerun()
             else:
