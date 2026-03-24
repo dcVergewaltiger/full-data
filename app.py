@@ -14,38 +14,34 @@ from fpdf import FPDF
 import datetime
 
 # --- PDF GENERATOR ---
-def _safe_text(text, max_len=180):
-    """Text auf latin-1 bereinigen, Sonderzeichen ersetzen und Länge begrenzen."""
-    text = str(text)
-    text = text.encode("latin-1", "replace").decode("latin-1")
-    if len(text) > max_len:
-        text = text[:max_len] + "..."
-    return text
+def _safe(text, max_len=160):
+    """Text sicher auf latin-1 kodieren und Länge begrenzen."""
+    s = str(text)
+    s = s.encode("latin-1", "replace").decode("latin-1")
+    return s[:max_len] + ("..." if len(s) > max_len else "")
 
-def create_pdf(report_data, title="OSINT Recherche Bericht"):
+def create_pdf(report_data, title="OSINT Bericht"):
+    """Erstellt ein PDF aus einem flachen oder verschachtelten Dictionary."""
     pdf = FPDF()
-    pdf.add_page()
     pdf.set_margins(15, 15, 15)
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, txt=_safe_text(title, 80), ln=True, align="C")
+    pdf.add_page()
+    # Titel
+    pdf.set_font("Arial", "B", 15)
+    pdf.cell(0, 10, txt=_safe(title, 80), ln=True, align="C")
+    pdf.set_font("Arial", "", 9)
+    pdf.cell(0, 8, txt=_safe(f"Erstellt: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}"), ln=True, align="C")
+    pdf.ln(6)
     pdf.set_font("Arial", "", 10)
-    pdf.cell(0, 10, txt=f"Erstellt am: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M:%S')}", ln=True, align="C")
-    pdf.ln(10)
-    for section, data in report_data.items():
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 10, txt=_safe_text(str(section).upper(), 80), ln=True)
-        pdf.set_font("Arial", "", 9)
-        if isinstance(data, dict):
-            for k, v in data.items():
-                line = _safe_text(f"{k}: {v}", 200)
-                pdf.multi_cell(0, 7, txt=line)
-        else:
-            pdf.multi_cell(0, 7, txt=_safe_text(str(data), 500))
-        pdf.ln(4)
-    result = pdf.output(dest="S")
-    if isinstance(result, bytes):
-        return result
-    return result.encode("latin-1", "replace")
+    usable_w = pdf.w - pdf.l_margin - pdf.r_margin
+    for k, v in report_data.items():
+        key_str   = _safe(str(k), 60)
+        val_str   = _safe(str(v), 140)
+        line      = f"{key_str}: {val_str}"
+        pdf.multi_cell(usable_w, 7, txt=line)
+    out = pdf.output(dest="S")
+    if isinstance(out, bytes):
+        return out
+    return out.encode("latin-1", "replace")
 
 # --- SEITEN KONFIGURATION ---
 st.set_page_config(page_title="Full Data", page_icon="🔍", layout="wide")
