@@ -5,6 +5,10 @@ from domain_recon import get_whois_info, get_dns_records, get_ip_address, get_ip
 from social_recon import check_social_media, lookup_discord_id, search_real_name
 from phone_recon import lookup_phone, check_account_existence, check_breaches, password_finder
 from media_recon import get_exif_data
+from sherlock_recon import sherlock_search, dork_generator, reverse_image_links
+from crypto_recon import lookup_wallet
+from github_recon import github_user_recon, github_email_search
+from geo_recon import gps_to_map, phone_spam_score, ip_network_scan, address_lookup, fake_profile_check
 from PIL import Image
 from fpdf import FPDF
 import datetime
@@ -124,6 +128,48 @@ const data={name:"🔍 Full Data",color:"#58a6ff",children:[
     {name:"Passwort-Hashes",color:"#e3b341",action:"pwfind",leaf:true,desc:"SHA1/MD5 Hashes aus Leaks"},
     {name:"Klartext-Passwörter",color:"#e3b341",action:"pwfind",leaf:true,desc:"Wenn im Klartext geleakt"},
     {name:"Breach-Quellen",color:"#e3b341",action:"pwfind",leaf:true,desc:"Welche Seite wurde gehackt"}
+  ]},
+  {name:"🔎 Sherlock",color:"#56d364",action:"sherlock",desc:"Benutzername auf 50+ Plattformen suchen",children:[
+    {name:"Instagram, TikTok",color:"#56d364",action:"sherlock",leaf:true,desc:"Social Media Profile finden"},
+    {name:"GitHub, Steam",color:"#56d364",action:"sherlock",leaf:true,desc:"Tech & Gaming Profile"},
+    {name:"OnlyFans, Patreon",color:"#56d364",action:"sherlock",leaf:true,desc:"Content Plattformen"},
+    {name:"50+ Plattformen",color:"#56d364",action:"sherlock",leaf:true,desc:"Vollständige Plattform-Liste"}
+  ]},
+  {name:"🔍 Dork Generator",color:"#bc8cff",action:"dork",desc:"Google Dorks für Namen, E-Mail, Telefon",children:[
+    {name:"Name Dorks",color:"#bc8cff",action:"dork",leaf:true,desc:"Suchanfragen für Personen"},
+    {name:"E-Mail Dorks",color:"#bc8cff",action:"dork",leaf:true,desc:"Suchanfragen für E-Mails"},
+    {name:"Telefon Dorks",color:"#bc8cff",action:"dork",leaf:true,desc:"Suchanfragen für Telefonnummern"}
+  ]},
+  {name:"🖼️ Reverse Image",color:"#f0883e",action:"revimg",desc:"Bild rückwärts suchen & Fake erkennen",children:[
+    {name:"Google Lens",color:"#f0883e",action:"revimg",leaf:true,desc:"Google Bildersuche"},
+    {name:"Yandex / TinEye",color:"#f0883e",action:"revimg",leaf:true,desc:"Alternative Suchmaschinen"},
+    {name:"PimEyes (Gesicht)",color:"#f0883e",action:"revimg",leaf:true,desc:"Gesichtserkennung"},
+    {name:"KI-Bild Erkennung",color:"#f0883e",action:"revimg",leaf:true,desc:"Fake-Profil-Bild erkennen"}
+  ]},
+  {name:"₿ Crypto Wallet",color:"#f7c948",action:"crypto",desc:"Bitcoin & Ethereum Wallets analysieren",children:[
+    {name:"Bitcoin (BTC)",color:"#f7c948",action:"crypto",leaf:true,desc:"Guthaben & Transaktionen"},
+    {name:"Ethereum (ETH)",color:"#f7c948",action:"crypto",leaf:true,desc:"ETH-Wallet analysieren"},
+    {name:"Blockchain Explorer",color:"#f7c948",action:"crypto",leaf:true,desc:"Transaktionshistorie"}
+  ]},
+  {name:"🐙 GitHub OSINT",color:"#8b949e",action:"github",desc:"GitHub Profile & E-Mails aus Commits",children:[
+    {name:"Profil-Analyse",color:"#8b949e",action:"github",leaf:true,desc:"Name, Bio, Standort, Repos"},
+    {name:"E-Mail aus Commits",color:"#8b949e",action:"github",leaf:true,desc:"Versteckte E-Mails finden"},
+    {name:"Aktivitäts-Analyse",color:"#8b949e",action:"github",leaf:true,desc:"Wann ist jemand aktiv"}
+  ]},
+  {name:"📡 IP-Netzwerk-Scan",color:"#ff9500",action:"ipscan",desc:"Offene Ports, Shodan, Blacklists",children:[
+    {name:"Shodan",color:"#ff9500",action:"ipscan",leaf:true,desc:"Offene Ports & Dienste"},
+    {name:"AbuseIPDB",color:"#ff9500",action:"ipscan",leaf:true,desc:"IP-Blacklist prüfen"},
+    {name:"VirusTotal",color:"#ff9500",action:"ipscan",leaf:true,desc:"Malware & Reputation"}
+  ]},
+  {name:"📍 Adress-Lookup",color:"#39d353",action:"address",desc:"Adresse auf Karte & Personen suchen",children:[
+    {name:"Google Maps",color:"#39d353",action:"address",leaf:true,desc:"Adresse auf Karte anzeigen"},
+    {name:"Streetview",color:"#39d353",action:"address",leaf:true,desc:"Gebäude ansehen"},
+    {name:"Telefonbuch",color:"#39d353",action:"address",leaf:true,desc:"Bewohner suchen (DE)"}
+  ]},
+  {name:"📞 Spam-Score",color:"#ff6b6b",action:"spam",desc:"Telefonnummer auf Spam prüfen",children:[
+    {name:"Tellows",color:"#ff6b6b",action:"spam",leaf:true,desc:"Spam-Score & Bewertungen"},
+    {name:"WerRuftAn",color:"#ff6b6b",action:"spam",leaf:true,desc:"Deutsche Spam-Datenbank"},
+    {name:"Truecaller",color:"#ff6b6b",action:"spam",leaf:true,desc:"Weltweite Spam-Erkennung"}
   ]}
 ]};
 const W=document.getElementById("mm").offsetWidth,H=580,R=Math.min(W,H)/2-90;
@@ -325,6 +371,143 @@ def show_pwfind_panel():
             pdf = create_pdf(result, f"Passwort-Finder: {email}")
             st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_PW_{email}.pdf", key="pw_pdf")
 
+def show_sherlock_panel():
+    st.markdown("### 🔎 Sherlock – Benutzername-Suche")
+    st.markdown("""
+    <div style='background:#161b22;border:1px solid #56d364;border-radius:8px;padding:12px 16px;margin-bottom:1rem;color:#56d364;font-size:.9rem'>
+    🔎 Sucht einen Benutzernamen auf <strong>50+ Plattformen</strong> gleichzeitig und gibt direkte Links zurück.
+    </div>
+    """, unsafe_allow_html=True)
+    username = st.text_input("Benutzername eingeben", key="sh_in")
+    if st.button("🔍 Auf allen Plattformen suchen", key="sh_go"):
+        with st.spinner("Suche auf 50+ Plattformen..."):
+            result = sherlock_search(username)
+            st.success(f"✅ {len(result)} Plattformen durchsucht – klicke die Links um Profile zu prüfen")
+            link_table(result, "Plattform", "Profil-Link")
+            pdf = create_pdf(result, f"Sherlock: {username}")
+            st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Sherlock_{username}.pdf", key="sh_pdf")
+
+def show_dork_panel():
+    st.markdown("### 🔍 Google Dork Generator")
+    st.markdown("""
+    <div style='background:#161b22;border:1px solid #bc8cff;border-radius:8px;padding:12px 16px;margin-bottom:1rem;color:#bc8cff;font-size:.9rem'>
+    🔍 Generiert optimierte Google-Suchanfragen (Dorks) für Namen, E-Mails und Telefonnummern.
+    </div>
+    """, unsafe_allow_html=True)
+    t1, t2, t3 = st.tabs(["Name", "E-Mail", "Telefon"])
+    with t1:
+        q = st.text_input("Vollständiger Name", key="dk_name")
+        if st.button("🔍 Dorks generieren", key="dk_name_go"):
+            result = dork_generator(q, "name")
+            link_table(result, "Suchanfrage", "Link")
+            pdf = create_pdf(result, f"Dork Generator: {q}")
+            st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Dork_{q}.pdf", key="dk_name_pdf")
+    with t2:
+        q = st.text_input("E-Mail Adresse", key="dk_email")
+        if st.button("🔍 Dorks generieren", key="dk_email_go"):
+            result = dork_generator(q, "email")
+            link_table(result, "Suchanfrage", "Link")
+            pdf = create_pdf(result, f"Dork Generator: {q}")
+            st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Dork_{q}.pdf", key="dk_email_pdf")
+    with t3:
+        q = st.text_input("Telefonnummer", key="dk_phone")
+        if st.button("🔍 Dorks generieren", key="dk_phone_go"):
+            result = dork_generator(q, "phone")
+            link_table(result, "Suchanfrage", "Link")
+            pdf = create_pdf(result, f"Dork Generator: {q}")
+            st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Dork_{q}.pdf", key="dk_phone_pdf")
+
+def show_revimg_panel():
+    st.markdown("### 🖼️ Reverse Image Search & Fake-Erkennung")
+    st.markdown("""
+    <div style='background:#161b22;border:1px solid #f0883e;border-radius:8px;padding:12px 16px;margin-bottom:1rem;color:#f0883e;font-size:.9rem'>
+    🖼️ Bild-URL eingeben oder direkt auf den Plattformen hochladen. Auch KI-generierte Bilder erkennbar.
+    </div>
+    """, unsafe_allow_html=True)
+    t1, t2 = st.tabs(["Reverse Image Search", "Fake-Profil Erkennung"])
+    with t1:
+        img_url = st.text_input("Bild-URL (optional, für direkte Suche)", key="ri_url")
+        if st.button("🔍 Such-Links generieren", key="ri_go"):
+            result = reverse_image_links(img_url)
+            link_table(result, "Dienst", "Link")
+            pdf = create_pdf(result, "Reverse Image Search")
+            st.download_button("📄 PDF", data=pdf, file_name="OSINT_ReverseImage.pdf", key="ri_pdf")
+    with t2:
+        img_url2 = st.text_input("Bild-URL (optional)", key="fp_url")
+        if st.button("🔍 Fake-Check Links", key="fp_go"):
+            result = fake_profile_check(img_url2)
+            link_table(result, "Tool", "Link")
+            pdf = create_pdf(result, "Fake-Profil Erkennung")
+            st.download_button("📄 PDF", data=pdf, file_name="OSINT_FakeCheck.pdf", key="fp_pdf")
+
+def show_crypto_panel():
+    st.markdown("### ₿ Crypto Wallet Tracker")
+    st.markdown("""
+    <div style='background:#161b22;border:1px solid #f7c948;border-radius:8px;padding:12px 16px;margin-bottom:1rem;color:#f7c948;font-size:.9rem'>
+    ₿ Bitcoin (BTC) und Ethereum (ETH) Wallets analysieren: Guthaben, Transaktionen, Explorer-Links.
+    </div>
+    """, unsafe_allow_html=True)
+    wallet = st.text_input("Wallet-Adresse eingeben (BTC oder ETH)", key="cw_in")
+    if st.button("🔍 Wallet analysieren", key="cw_go"):
+        with st.spinner("Analysiere Wallet..."):
+            result = lookup_wallet(wallet)
+            link_table(result, "Eigenschaft", "Wert / Link")
+            pdf = create_pdf(result, f"Crypto Wallet: {wallet}")
+            st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Crypto_{wallet[:10]}.pdf", key="cw_pdf")
+
+def show_github_panel():
+    st.markdown("### 🐙 GitHub OSINT")
+    t1, t2 = st.tabs(["Benutzername-Analyse", "E-Mail Suche"])
+    with t1:
+        uname = st.text_input("GitHub Benutzername", key="gh_in")
+        if st.button("🔍 Profil analysieren", key="gh_go"):
+            with st.spinner("Analysiere GitHub-Profil..."):
+                result = github_user_recon(uname)
+                if "Fehler" in result:
+                    st.error(result["Fehler"])
+                else:
+                    link_table(result, "Eigenschaft", "Wert / Link")
+                    pdf = create_pdf(result, f"GitHub OSINT: {uname}")
+                    st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_GitHub_{uname}.pdf", key="gh_pdf")
+    with t2:
+        email = st.text_input("E-Mail Adresse", key="ghe_in")
+        if st.button("🔍 Auf GitHub suchen", key="ghe_go"):
+            result = github_email_search(email)
+            link_table(result, "Suche", "Link")
+            pdf = create_pdf(result, f"GitHub E-Mail: {email}")
+            st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_GitHubEmail_{email}.pdf", key="ghe_pdf")
+
+def show_ipscan_panel():
+    st.markdown("### 📡 IP-Netzwerk-Scan")
+    ip = st.text_input("IP-Adresse eingeben", key="ips_in")
+    if st.button("🔍 IP scannen", key="ips_go"):
+        with st.spinner("Scanne IP..."):
+            result = ip_network_scan(ip)
+            is_vpn = result.get("Proxy/VPN", "Nein") == "Ja"
+            if is_vpn:
+                st.warning("⚠️ VPN/Proxy erkannt")
+            link_table(result, "Eigenschaft", "Wert / Link")
+            pdf = create_pdf(result, f"IP-Scan: {ip}")
+            st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_IPScan_{ip}.pdf", key="ips_pdf")
+
+def show_address_panel():
+    st.markdown("### 📍 Adress-Lookup")
+    addr = st.text_input("Adresse eingeben (z.B. Musterstr. 1, Berlin)", key="adr_in")
+    if st.button("🔍 Adresse suchen", key="adr_go"):
+        result = address_lookup(addr)
+        link_table(result, "Dienst", "Link")
+        pdf = create_pdf(result, f"Adress-Lookup: {addr}")
+        st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Adresse.pdf", key="adr_pdf")
+
+def show_spam_panel():
+    st.markdown("### 📞 Telefon Spam-Score")
+    phone = st.text_input("Telefonnummer eingeben (+49...)", key="sp_in")
+    if st.button("🔍 Spam-Score prüfen", key="sp_go"):
+        result = phone_spam_score(phone)
+        link_table(result, "Dienst", "Link")
+        pdf = create_pdf(result, f"Spam-Score: {phone}")
+        st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Spam_{phone}.pdf", key="sp_pdf")
+
 # --- HAUPT APP ---
 if check_password():
     st.markdown("""
@@ -354,12 +537,20 @@ if check_password():
     st.sidebar.markdown("## 🗂️ Kategorien")
     for label, key in [
         ("📱 Telefon & Nummer","phone"),
+        ("📞 Spam-Score","spam"),
         ("📧 E-Mail & Accounts","email"),
-        ("👤 Social & Namen","social"),
-        ("🌐 Domain & IP","domain"),
-        ("📸 Bild & Metadaten","image"),
-        ("🛡️ VPN-Breaker","vpn"),
         ("🔑 Passwort-Finder","pwfind"),
+        ("👤 Social & Namen","social"),
+        ("🔎 Sherlock","sherlock"),
+        ("🌐 Domain & IP","domain"),
+        ("📡 IP-Netzwerk-Scan","ipscan"),
+        ("🛡️ VPN-Breaker","vpn"),
+        ("📸 Bild & Metadaten","image"),
+        ("🖼️ Reverse Image","revimg"),
+        ("🔍 Dork Generator","dork"),
+        ("₿ Crypto Wallet","crypto"),
+        ("🐙 GitHub OSINT","github"),
+        ("📍 Adress-Lookup","address"),
     ]:
         if st.sidebar.button(label, key=f"sb_{key}"):
             st.session_state.panel = key
@@ -372,12 +563,20 @@ if check_password():
     st.markdown("<hr>", unsafe_allow_html=True)
 
     p = st.session_state.panel
-    if   p == "phone":   show_phone_panel()
-    elif p == "email":   show_email_panel()
-    elif p == "social":  show_social_panel()
-    elif p == "domain":  show_domain_panel()
-    elif p == "image":   show_image_panel()
-    elif p == "vpn":     show_vpn_panel()
-    elif p == "pwfind":  show_pwfind_panel()
+    if   p == "phone":    show_phone_panel()
+    elif p == "email":    show_email_panel()
+    elif p == "social":   show_social_panel()
+    elif p == "domain":   show_domain_panel()
+    elif p == "image":    show_image_panel()
+    elif p == "vpn":      show_vpn_panel()
+    elif p == "pwfind":   show_pwfind_panel()
+    elif p == "sherlock": show_sherlock_panel()
+    elif p == "dork":     show_dork_panel()
+    elif p == "revimg":   show_revimg_panel()
+    elif p == "crypto":   show_crypto_panel()
+    elif p == "github":   show_github_panel()
+    elif p == "ipscan":   show_ipscan_panel()
+    elif p == "address":  show_address_panel()
+    elif p == "spam":     show_spam_panel()
     else:
         st.markdown("<div style='text-align:center;color:#8b949e;padding:2rem;font-size:1.1rem'>👆 Wähle eine Kategorie aus der Seitenleiste oder klicke auf einen Knoten</div>", unsafe_allow_html=True)
