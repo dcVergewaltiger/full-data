@@ -1,9 +1,9 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
-from domain_recon import get_whois_info, get_dns_records, get_ip_address, get_ip_location
+from domain_recon import get_whois_info, get_dns_records, get_ip_address, get_ip_location, vpn_breaker
 from social_recon import check_social_media, lookup_discord_id, search_real_name
-from phone_recon import lookup_phone, check_account_existence, check_breaches
+from phone_recon import lookup_phone, check_account_existence, check_breaches, password_finder
 from media_recon import get_exif_data
 from PIL import Image
 from fpdf import FPDF
@@ -112,6 +112,18 @@ const data={name:"🔍 Full Data",color:"#58a6ff",children:[
     {name:"EXIF-Daten",color:"#79c0ff",action:"image",leaf:true,desc:"Kamera, Datum, Software"},
     {name:"GPS-Koordinaten",color:"#79c0ff",action:"image",leaf:true,desc:"Aufnahmeort aus Bild"},
     {name:"Kamera-Infos",color:"#79c0ff",action:"image",leaf:true,desc:"Gerätemodell & Einstellungen"}
+  ]},
+  {name:"🛡️ VPN-Breaker",color:"#ff7b72",action:"vpn",desc:"VPN/Proxy erkennen & echten Standort analysieren",children:[
+    {name:"VPN erkennen",color:"#ff7b72",action:"vpn",leaf:true,desc:"Proxy/VPN/Hosting Flag prüfen"},
+    {name:"Echter Standort",color:"#ff7b72",action:"vpn",leaf:true,desc:"Gemeldeter vs. echter Standort"},
+    {name:"ISP & ASN",color:"#ff7b72",action:"vpn",leaf:true,desc:"Internetanbieter & Netzwerk-Info"},
+    {name:"Reverse-DNS",color:"#ff7b72",action:"vpn",leaf:true,desc:"Hostname hinter der IP"}
+  ]},
+  {name:"🔑 Passwort-Finder",color:"#e3b341",action:"pwfind",desc:"Passwörter aus Leaks per E-Mail suchen",children:[
+    {name:"Leak-Datenbanken",color:"#e3b341",action:"pwfind",leaf:true,desc:"DeHashed, LeakCheck, Snusbase"},
+    {name:"Passwort-Hashes",color:"#e3b341",action:"pwfind",leaf:true,desc:"SHA1/MD5 Hashes aus Leaks"},
+    {name:"Klartext-Passwörter",color:"#e3b341",action:"pwfind",leaf:true,desc:"Wenn im Klartext geleakt"},
+    {name:"Breach-Quellen",color:"#e3b341",action:"pwfind",leaf:true,desc:"Welche Seite wurde gehackt"}
   ]}
 ]};
 const W=document.getElementById("mm").offsetWidth,H=580,R=Math.min(W,H)/2-90;
@@ -244,6 +256,52 @@ def show_image_panel():
             pdf = create_pdf(exif, "Bild Metadaten Bericht")
             st.download_button("📄 PDF", data=pdf, file_name="OSINT_Bild_Metadaten.pdf", key="img_pdf")
 
+def show_vpn_panel():
+    st.markdown("### 🛡️ VPN-Breaker")
+    st.markdown("""
+    <div style='background:#161b22;border:1px solid #ff7b72;border-radius:8px;padding:12px 16px;margin-bottom:1rem;color:#ff7b72;font-size:.9rem'>
+    ⚠️ Gibt den <strong>gemeldeten Standort</strong> (VPN-Server) sowie Hinweise ob ein VPN/Proxy erkannt wurde zurück.
+    Der <strong>echte Standort</strong> des Nutzers kann technisch nicht ermittelt werden – nur der VPN-Anbieter kennt ihn.
+    </div>
+    """, unsafe_allow_html=True)
+    ip = st.text_input("IP-Adresse eingeben (z.B. 95.112.84.129)", key="vpn_in")
+    if st.button("🔍 IP analysieren", key="vpn_go"):
+        with st.spinner("Analysiere IP..."):
+            result = vpn_breaker(ip)
+            is_vpn = "JA" in result.get("VPN / Proxy erkannt", "")
+            if is_vpn:
+                st.error("🚨 VPN / Proxy erkannt!")
+            else:
+                st.success("✅ Kein VPN/Proxy erkannt")
+            st.table(pd.DataFrame(result.items(), columns=["Eigenschaft","Wert"]))
+            pdf = create_pdf(result, f"VPN-Analyse: {ip}")
+            st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_VPN_{ip}.pdf", key="vpn_pdf")
+
+def show_pwfind_panel():
+    st.markdown("### 🔑 Passwort-Finder")
+    st.markdown("""
+    <div style='background:#161b22;border:1px solid #e3b341;border-radius:8px;padding:12px 16px;margin-bottom:1rem;color:#e3b341;font-size:.9rem'>
+    🔑 Sucht in öffentlich bekannten Leak-Datenbanken nach Passwörtern, die mit einer E-Mail verbunden sind.
+    Direkte Links zu den wichtigsten Diensten + automatische API-Abfrage bei BreachDirectory.
+    </div>
+    """, unsafe_allow_html=True)
+    email = st.text_input("E-Mail Adresse eingeben", key="pw_in")
+    if st.button("🔍 Passwörter suchen", key="pw_go"):
+        with st.spinner("Durchsuche Leak-Datenbanken..."):
+            result = password_finder(email)
+            leak_funds = {k: v for k, v in result.items() if k.startswith("Leak-Fund")}
+            links      = {k: v for k, v in result.items() if not k.startswith("Leak-Fund")}
+            if leak_funds:
+                st.error(f"🚨 {len(leak_funds)} Passwort-Einträge in Leaks gefunden!")
+                st.subheader("Gefundene Einträge")
+                st.table(pd.DataFrame(leak_funds.items(), columns=["Fund","Details"]))
+            else:
+                st.info("ℹ️ Keine direkten Treffer über automatische API. Manuelle Suche empfohlen.")
+            st.subheader("🔗 Such-Links (manuell prüfen)")
+            st.table(pd.DataFrame(links.items(), columns=["Dienst","Link"]))
+            pdf = create_pdf(result, f"Passwort-Finder: {email}")
+            st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_PW_{email}.pdf", key="pw_pdf")
+
 # --- HAUPT APP ---
 if check_password():
     st.markdown("""
@@ -277,6 +335,8 @@ if check_password():
         ("👤 Social & Namen","social"),
         ("🌐 Domain & IP","domain"),
         ("📸 Bild & Metadaten","image"),
+        ("🛡️ VPN-Breaker","vpn"),
+        ("🔑 Passwort-Finder","pwfind"),
     ]:
         if st.sidebar.button(label, key=f"sb_{key}"):
             st.session_state.panel = key
@@ -289,10 +349,12 @@ if check_password():
     st.markdown("<hr>", unsafe_allow_html=True)
 
     p = st.session_state.panel
-    if   p == "phone":  show_phone_panel()
-    elif p == "email":  show_email_panel()
-    elif p == "social": show_social_panel()
-    elif p == "domain": show_domain_panel()
-    elif p == "image":  show_image_panel()
+    if   p == "phone":   show_phone_panel()
+    elif p == "email":   show_email_panel()
+    elif p == "social":  show_social_panel()
+    elif p == "domain":  show_domain_panel()
+    elif p == "image":   show_image_panel()
+    elif p == "vpn":     show_vpn_panel()
+    elif p == "pwfind":  show_pwfind_panel()
     else:
         st.markdown("<div style='text-align:center;color:#8b949e;padding:2rem;font-size:1.1rem'>👆 Wähle eine Kategorie aus der Seitenleiste oder klicke auf einen Knoten</div>", unsafe_allow_html=True)
