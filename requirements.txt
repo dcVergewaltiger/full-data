@@ -1,0 +1,7 @@
+streamlit
+pandas
+pillow
+requests
+tabulate
+fpdf2
+dnspython
