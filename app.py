@@ -1,5 +1,5 @@
 import streamlit as st
-import json
+import streamlit.components.v1 as components
 import pandas as pd
 from domain_recon import get_whois_info, get_dns_records, get_ip_address, get_ip_location
 from social_recon import check_social_media, lookup_discord_id, search_real_name
@@ -8,18 +8,16 @@ from media_recon import get_exif_data
 from PIL import Image
 from fpdf import FPDF
 import datetime
-import io
 
-# --- PDF GENERATOR FUNKTION ---
+# --- PDF GENERATOR ---
 def create_pdf(report_data, title="OSINT Recherche Bericht"):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(200, 10, txt=title, ln=True, align='C')
+    pdf.cell(200, 10, txt=title, ln=True, align="C")
     pdf.set_font("Arial", "", 10)
-    pdf.cell(200, 10, txt=f"Erstellt am: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M:%S')}", ln=True, align='C')
+    pdf.cell(200, 10, txt=f"Erstellt am: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M:%S')}", ln=True, align="C")
     pdf.ln(10)
-
     for section, data in report_data.items():
         pdf.set_font("Arial", "B", 12)
         pdf.cell(200, 10, txt=section.upper(), ln=True)
@@ -30,26 +28,21 @@ def create_pdf(report_data, title="OSINT Recherche Bericht"):
         else:
             pdf.multi_cell(0, 8, txt=str(data))
         pdf.ln(5)
-
-    # FIX: pdf.output(dest='S') gibt in fpdf2 bereits bytes zurück.
-    # Kein .encode() nötig – direktes Zurückgeben des bytes-Objekts.
-    result = pdf.output(dest='S')
+    result = pdf.output(dest="S")
     if isinstance(result, bytes):
         return result
-    # Fallback für ältere fpdf-Versionen, die noch str zurückgeben
-    return result.encode('latin-1', 'replace')
+    return result.encode("latin-1", "replace")
 
 # --- SEITEN KONFIGURATION ---
-st.set_page_config(page_title="Manus OSINT Pro Dashboard", page_icon="🔍", layout="wide")
+st.set_page_config(page_title="Full Data", page_icon="🔍", layout="wide")
 
-# --- EINFACHER PASSWORTSCHUTZ ---
+# --- PASSWORTSCHUTZ ---
 def check_password():
     if "password_correct" not in st.session_state:
         st.session_state.password_correct = False
-
     if not st.session_state.password_correct:
         st.title("🔒 Zugriff geschützt")
-        pwd = st.text_input("Bitte Passwort eingeben:", type="password")
+        pwd = st.text_input("Passwort eingeben:", type="password")
         if st.button("Einloggen"):
             if pwd == "31nichoy":
                 st.session_state.password_correct = True
@@ -59,114 +52,237 @@ def check_password():
         return False
     return True
 
+# --- MINDMAP ---
+def render_mindmap():
+    html = """<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0d1117;font-family:'Segoe UI',Arial,sans-serif;overflow:hidden}
+#mm{width:100%;height:580px;position:relative}
+svg{width:100%;height:100%}
+.node circle{cursor:pointer;stroke-width:2px;transition:all .25s}
+.node circle:hover{filter:brightness(1.5);stroke-width:3px}
+.node text{font-size:13px;fill:#e6edf3;cursor:pointer;user-select:none;pointer-events:none}
+.link{fill:none;stroke:#30363d;stroke-width:1.5px}
+#tip{position:absolute;background:#161b22;border:1px solid #30363d;border-radius:8px;
+     padding:9px 13px;color:#e6edf3;font-size:12px;pointer-events:none;opacity:0;
+     transition:opacity .2s;max-width:240px;z-index:99}
+#leg{position:absolute;bottom:8px;left:10px;color:#8b949e;font-size:11px;line-height:1.9}
+</style></head>
+<body>
+<div id="mm"><div id="tip"></div>
+<div id="leg">🖱 Klicken = Auf-/Zuklappen &nbsp;|&nbsp; Seitenleiste = Tool öffnen</div></div>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+const data={name:"🔍 Full Data",color:"#58a6ff",children:[
+  {name:"📱 Telefon & Nummer",color:"#3fb950",action:"phone",desc:"Telefonnummern analysieren",children:[
+    {name:"Telefon-Lookup",color:"#3fb950",action:"phone",leaf:true,desc:"Carrier, Land, Leitungstyp"},
+    {name:"WhatsApp prüfen",color:"#3fb950",leaf:true,url:"https://wa.me/",desc:"Manuell via wa.me prüfen"},
+    {name:"Telegram prüfen",color:"#3fb950",leaf:true,desc:"In Telegram App suchen"},
+    {name:"Standort (Vorwahl)",color:"#3fb950",action:"phone",leaf:true,desc:"Land & Region per Vorwahl"}
+  ]},
+  {name:"📧 E-Mail & Accounts",color:"#f78166",action:"email",desc:"E-Mail & Accounts untersuchen",children:[
+    {name:"Account-Existenz",color:"#f78166",action:"email",leaf:true,desc:"Google, Apple u.a. prüfen"},
+    {name:"Datenlecks",color:"#f78166",action:"email",leaf:true,desc:"Have I Been Pwned, DeHashed"},
+    {name:"IntelligenceX",color:"#f78166",leaf:true,url:"https://intelx.io",desc:"Erweiterte Breach-Suche"}
+  ]},
+  {name:"👤 Social & Namen",color:"#d2a8ff",action:"social",desc:"Personen & Profile recherchieren",children:[
+    {name:"Benutzername",color:"#d2a8ff",action:"social",leaf:true,desc:"Plattformübergreifende Suche"},
+    {name:"Echter Name",color:"#d2a8ff",action:"social",leaf:true,desc:"Namenssuche via Suchmaschinen"},
+    {name:"Discord-ID",color:"#d2a8ff",action:"social",leaf:true,desc:"Discord Profil via ID finden"}
+  ]},
+  {name:"🌐 Domain & IP",color:"#ffa657",action:"domain",desc:"Domains und IPs analysieren",children:[
+    {name:"WHOIS Info",color:"#ffa657",action:"domain",leaf:true,desc:"Registrar, Inhaber, Datum"},
+    {name:"DNS-Einträge",color:"#ffa657",action:"domain",leaf:true,desc:"A, MX, NS, TXT Records"},
+    {name:"IP-Adresse",color:"#ffa657",action:"domain",leaf:true,desc:"IP-Auflösung der Domain"},
+    {name:"IP-Standort",color:"#ffa657",action:"domain",leaf:true,desc:"Geolokalisierung der IP"}
+  ]},
+  {name:"📸 Bild & Metadaten",color:"#79c0ff",action:"image",desc:"EXIF-Daten extrahieren",children:[
+    {name:"EXIF-Daten",color:"#79c0ff",action:"image",leaf:true,desc:"Kamera, Datum, Software"},
+    {name:"GPS-Koordinaten",color:"#79c0ff",action:"image",leaf:true,desc:"Aufnahmeort aus Bild"},
+    {name:"Kamera-Infos",color:"#79c0ff",action:"image",leaf:true,desc:"Gerätemodell & Einstellungen"}
+  ]}
+]};
+const W=document.getElementById("mm").offsetWidth,H=580,R=Math.min(W,H)/2-90;
+const svg=d3.select("#mm").append("svg").attr("width",W).attr("height",H);
+const g=svg.append("g");
+svg.call(d3.zoom().scaleExtent([.35,3]).on("zoom",e=>g.attr("transform",e.transform)))
+   .call(d3.zoom().transform,d3.zoomIdentity.translate(W/2,H/2));
+g.attr("transform",`translate(${W/2},${H/2})`);
+const tree=d3.tree().size([2*Math.PI,R]).separation((a,b)=>(a.parent==b.parent?1:2)/a.depth);
+let root=d3.hierarchy(data);
+root.descendants().forEach(d=>{if(d.depth>0&&d.children){d._children=d.children;d.children=null;}});
+const tip=document.getElementById("tip");
+function update(src){
+  const lo=tree(root);
+  const lk=g.selectAll(".link").data(lo.links(),d=>d.target.data.name);
+  lk.enter().append("path").attr("class","link").merge(lk).transition().duration(350)
+    .attr("d",d3.linkRadial().angle(d=>d.x).radius(d=>d.y));
+  lk.exit().remove();
+  const nd=g.selectAll(".node").data(lo.descendants(),d=>d.data.name);
+  const ne=nd.enter().append("g").attr("class","node")
+    .attr("transform",d=>`rotate(${src.x*180/Math.PI-90}) translate(${src.y},0)`)
+    .on("click",(ev,d)=>{
+      ev.stopPropagation();
+      if(d.data.leaf){if(d.data.url)window.open(d.data.url,"_blank");}
+      else{if(d.children){d._children=d.children;d.children=null;}else{d.children=d._children;d._children=null;}update(d);}
+    })
+    .on("mouseover",(ev,d)=>{if(d.data.desc){tip.style.opacity="1";tip.innerHTML=`<strong style="color:${d.data.color||"#58a6ff"}">${d.data.name}</strong><br>${d.data.desc}`;}})
+    .on("mousemove",ev=>{const r=document.getElementById("mm").getBoundingClientRect();tip.style.left=(ev.clientX-r.left+14)+"px";tip.style.top=(ev.clientY-r.top-10)+"px";})
+    .on("mouseout",()=>{tip.style.opacity="0";});
+  ne.append("circle")
+    .attr("r",d=>d.depth===0?20:d.data.leaf?6:13)
+    .attr("fill",d=>d.data.color||"#58a6ff")
+    .attr("stroke",d=>d.data.color||"#58a6ff")
+    .attr("fill-opacity",d=>d.data.leaf?.55:.88);
+  ne.append("text").attr("dy","0.31em")
+    .attr("x",d=>{if(d.depth===0)return 0;return d.x<Math.PI===!d.children?18:-18;})
+    .attr("text-anchor",d=>{if(d.depth===0)return"middle";return d.x<Math.PI===!d.children?"start":"end";})
+    .attr("transform",d=>d.depth===0?"":`rotate(${d.x>=Math.PI?180:0})`)
+    .text(d=>d.data.name)
+    .style("font-size",d=>d.depth===0?"16px":d.data.leaf?"11px":"13px")
+    .style("font-weight",d=>d.depth<=1?"bold":"normal");
+  nd.merge(ne).transition().duration(350).attr("transform",d=>`rotate(${d.x*180/Math.PI-90}) translate(${d.y},0)`);
+  nd.exit().transition().duration(350).attr("transform",d=>`rotate(${src.x*180/Math.PI-90}) translate(${src.y},0)`).remove();
+}
+update(root);
+</script></body></html>"""
+    components.html(html, height=600, scrolling=False)
+
+# --- TOOL PANELS ---
+def show_phone_panel():
+    st.markdown("### 📱 Telefon & Nummer")
+    phone = st.text_input("Telefonnummer (+49...)", key="phone_in")
+    if st.button("🔍 Analysieren", key="phone_go"):
+        with st.spinner("Läuft..."):
+            d = lookup_phone(phone)
+            st.table(pd.DataFrame(d.items(), columns=["Info","Wert"]))
+            pdf = create_pdf(d, f"Telefon Bericht: {phone}")
+            st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Phone_{phone}.pdf", key="phone_pdf")
+
+def show_email_panel():
+    st.markdown("### 📧 E-Mail & Accounts")
+    email = st.text_input("E-Mail Adresse", key="email_in")
+    if st.button("🔍 Analysieren", key="email_go"):
+        with st.spinner("Läuft..."):
+            e = check_account_existence(email)
+            b = check_breaches(email)
+            st.subheader("Account-Existenz")
+            st.table(pd.DataFrame(e.items(), columns=["Dienst","Status"]))
+            st.subheader("Datenlecks")
+            st.table(pd.DataFrame(b.items(), columns=["Quelle","Link"]))
+            pdf = create_pdf({**e,**b}, f"Email Bericht: {email}")
+            st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Email_{email}.pdf", key="email_pdf")
+
+def show_social_panel():
+    st.markdown("### 👤 Social Media & Namen")
+    t1,t2,t3 = st.tabs(["Benutzername","Echter Name","Discord-ID"])
+    with t1:
+        u = st.text_input("Benutzername", key="u_in")
+        if st.button("🔍 Suchen", key="u_go"):
+            with st.spinner("Läuft..."):
+                r = check_social_media(u)
+                st.table(pd.DataFrame(r.items(), columns=["Plattform","Ergebnis"]))
+                pdf = create_pdf(r, f"Social Bericht: {u}")
+                st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Social_{u}.pdf", key="u_pdf")
+    with t2:
+        n = st.text_input("Echter Name", key="n_in")
+        if st.button("🔍 Suchen", key="n_go"):
+            with st.spinner("Läuft..."):
+                r = search_real_name(n)
+                st.table(pd.DataFrame(r.items(), columns=["Quelle","Link"]))
+                pdf = create_pdf(r, f"Namens Bericht: {n}")
+                st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Name_{n}.pdf", key="n_pdf")
+    with t3:
+        d = st.text_input("Discord-ID", key="d_in")
+        if st.button("🔍 Lookup", key="d_go"):
+            with st.spinner("Läuft..."):
+                r = lookup_discord_id(d)
+                st.table(pd.DataFrame(r.items(), columns=["Service","Link"]))
+                pdf = create_pdf(r, f"Discord Bericht: {d}")
+                st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Discord_{d}.pdf", key="d_pdf")
+
+def show_domain_panel():
+    st.markdown("### 🌐 Domain & IP")
+    domain = st.text_input("Domain (z.B. google.com)", key="dom_in")
+    if st.button("🔍 Analysieren", key="dom_go"):
+        with st.spinner("Läuft..."):
+            ip  = get_ip_address(domain)
+            loc = get_ip_location(ip)
+            dns = get_dns_records(domain)
+            c1,c2 = st.columns(2)
+            with c1:
+                st.subheader("IP & Standort")
+                st.write(f"**IP:** {ip}")
+                st.json(loc)
+            with c2:
+                st.subheader("DNS-Einträge")
+                st.table(pd.DataFrame(dns.items(), columns=["Typ","Wert"]))
+            pdf = create_pdf({"Domain":domain,"IP":ip,"Standort":loc,"DNS":dns}, f"Domain Bericht: {domain}")
+            st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Domain_{domain}.pdf", key="dom_pdf")
+
+def show_image_panel():
+    st.markdown("### 📸 Bild & Metadaten")
+    f = st.file_uploader("Bild hochladen", type=["jpg","jpeg","png"], key="img_up")
+    if f:
+        st.image(Image.open(f), caption="Hochgeladenes Bild", use_container_width=True)
+        if st.button("🔍 Metadaten auslesen", key="img_go"):
+            with open("temp_image.jpg","wb") as fp: fp.write(f.getbuffer())
+            exif = get_exif_data("temp_image.jpg")
+            st.json(exif)
+            pdf = create_pdf(exif, "Bild Metadaten Bericht")
+            st.download_button("📄 PDF", data=pdf, file_name="OSINT_Bild_Metadaten.pdf", key="img_pdf")
+
+# --- HAUPT APP ---
 if check_password():
-    st.title("🔍 Pro OSINT Dashboard")
-    st.markdown("---")
+    st.markdown("""
+    <style>
+    [data-testid="stAppViewContainer"]{background:#0d1117;color:#e6edf3}
+    [data-testid="stSidebar"]{background:#161b22;border-right:1px solid #30363d}
+    .stButton>button{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:6px;transition:all .2s}
+    .stButton>button:hover{background:#388bfd;border-color:#388bfd;color:#fff}
+    .stTextInput>div>div>input{background:#161b22;color:#e6edf3;border:1px solid #30363d;border-radius:6px}
+    h1,h2,h3{color:#58a6ff !important}
+    .stTabs [data-baseweb="tab"]{color:#8b949e}
+    .stTabs [aria-selected="true"]{color:#58a6ff !important}
+    hr{border-color:#30363d}
+    </style>
+    """, unsafe_allow_html=True)
 
-    # Sidebar Navigation
-    menu = st.sidebar.selectbox("Suche auswählen", ["🌐 Domain-Recherche", "👤 Social Media & Namen", "📱 Telefon & Accounts", "📸 Bild-Metadaten"])
+    st.markdown("""
+    <div style='text-align:center;padding:1rem 0 .3rem'>
+      <h1 style='color:#58a6ff;font-size:2.2rem;letter-spacing:3px'>🔍 FULL DATA</h1>
+      <p style='color:#8b949e;font-size:.9rem'>Klicke auf einen Knoten oder wähle links eine Kategorie</p>
+    </div><hr>
+    """, unsafe_allow_html=True)
 
-    # --- DOMAIN RECHERCHE ---
-    if menu == "🌐 Domain-Recherche":
-        st.header("Domain- & IP-Infos")
-        domain = st.text_input("Domain eingeben (z.B. google.com)")
-        if st.button("Domain prüfen"):
-            with st.spinner("Recherche läuft..."):
-                ip = get_ip_address(domain)
-                loc = get_ip_location(ip)
-                dns = get_dns_records(domain)
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.subheader("IP & Standort")
-                    st.write(f"**IP:** {ip}")
-                    st.json(loc)
-                with col2:
-                    st.subheader("DNS-Einträge")
-                    st.table(pd.DataFrame(dns.items(), columns=["Typ", "Wert"]))
-                
-                # PDF Export
-                report = {"Domain": domain, "IP": ip, "Standort": loc, "DNS": dns}
-                pdf_bytes = create_pdf(report, f"Domain Bericht: {domain}")
-                st.download_button("📄 Bericht als PDF herunterladen", data=pdf_bytes, file_name=f"OSINT_Domain_{domain}.pdf")
+    if "panel" not in st.session_state:
+        st.session_state.panel = None
 
-    # --- SOCIAL MEDIA ---
-    elif menu == "👤 Social Media & Namen":
-        st.header("Social Media & Namens-Suche")
-        tab1, tab2, tab3 = st.tabs(["Benutzername", "Echter Name", "Discord-ID"])
-        
-        with tab1:
-            username = st.text_input("Benutzername suchen")
-            if st.button("Social Media Check"):
-                with st.spinner("Suche läuft..."):
-                    results = check_social_media(username)
-                    st.table(pd.DataFrame(results.items(), columns=["Plattform", "Ergebnis"]))
-                    pdf_bytes = create_pdf(results, f"Social Media Bericht: {username}")
-                    st.download_button("📄 Bericht als PDF herunterladen", data=pdf_bytes, file_name=f"OSINT_Social_{username}.pdf")
-                    
-        with tab2:
-            full_name = st.text_input("Echter Name (z.B. Max Mustermann)")
-            if st.button("Namens-Suche"):
-                with st.spinner("Suche läuft..."):
-                    name_data = search_real_name(full_name)
-                    st.table(pd.DataFrame(name_data.items(), columns=["Quelle", "Link"]))
-                    pdf_bytes = create_pdf(name_data, f"Namens Bericht: {full_name}")
-                    st.download_button("📄 Bericht als PDF herunterladen", data=pdf_bytes, file_name=f"OSINT_Name_{full_name}.pdf")
-                    
-        with tab3:
-            d_id = st.text_input("Discord-ID (Zahlenreihe)")
-            if st.button("Discord Lookup"):
-                with st.spinner("Suche läuft..."):
-                    discord_data = lookup_discord_id(d_id)
-                    st.table(pd.DataFrame(discord_data.items(), columns=["Service", "Link"]))
-                    pdf_bytes = create_pdf(discord_data, f"Discord Bericht: {d_id}")
-                    st.download_button("📄 Bericht als PDF herunterladen", data=pdf_bytes, file_name=f"OSINT_Discord_{d_id}.pdf")
-
-    # --- TELEFON & ACCOUNTS ---
-    elif menu == "📱 Telefon & Accounts":
-        st.header("Telefon- & Account-Recherche")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            phone = st.text_input("Telefonnummer (+49...)")
-            if st.button("Telefon-Check"):
-                with st.spinner("Suche läuft..."):
-                    p_data = lookup_phone(phone)
-                    st.table(pd.DataFrame(p_data.items(), columns=["Info", "Wert"]))
-                    pdf_bytes = create_pdf(p_data, f"Telefon Bericht: {phone}")
-                    st.download_button("📄 Bericht als PDF herunterladen", data=pdf_bytes, file_name=f"OSINT_Phone_{phone}.pdf")
-                    
-        with col2:
-            email = st.text_input("E-Mail Adresse")
-            if st.button("Account- & Breach-Check"):
-                with st.spinner("Suche läuft..."):
-                    e_data = check_account_existence(email)
-                    b_data = check_breaches(email)
-                    st.subheader("Account-Existenz")
-                    st.table(pd.DataFrame(e_data.items(), columns=["Dienst", "Status"]))
-                    st.subheader("Datenlecks (Breaches)")
-                    st.table(pd.DataFrame(b_data.items(), columns=["Quelle", "Link"]))
-                    pdf_bytes = create_pdf({**e_data, **b_data}, f"Email Bericht: {email}")
-                    st.download_button("📄 Bericht als PDF herunterladen", data=pdf_bytes, file_name=f"OSINT_Email_{email}.pdf")
-
-    # --- BILD-METADATEN ---
-    elif menu == "📸 Bild-Metadaten":
-        st.header("Bild-Metadaten (EXIF) Extraktor")
-        uploaded_file = st.file_uploader("Bild hochladen", type=["jpg", "jpeg", "png"])
-        if uploaded_file is not None:
-            image = Image.open(uploaded_file)
-            st.image(image, caption="Hochgeladenes Bild", use_container_width=True)
-            
-            if st.button("Metadaten auslesen"):
-                with open("temp_image.jpg", "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                exif = get_exif_data("temp_image.jpg")
-                st.subheader("Gefundene Metadaten")
-                st.json(exif)
-                pdf_bytes = create_pdf(exif, "Bild Metadaten Bericht")
-                st.download_button("📄 Bericht als PDF herunterladen", data=pdf_bytes, file_name="OSINT_Bild_Metadaten.pdf")
-
+    st.sidebar.markdown("## 🗂️ Kategorien")
+    for label, key in [
+        ("📱 Telefon & Nummer","phone"),
+        ("📧 E-Mail & Accounts","email"),
+        ("👤 Social & Namen","social"),
+        ("🌐 Domain & IP","domain"),
+        ("📸 Bild & Metadaten","image"),
+    ]:
+        if st.sidebar.button(label, key=f"sb_{key}"):
+            st.session_state.panel = key
     st.sidebar.markdown("---")
-    if st.sidebar.button("Ausloggen"):
+    if st.sidebar.button("🚪 Ausloggen"):
         st.session_state.password_correct = False
         st.rerun()
+
+    render_mindmap()
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    p = st.session_state.panel
+    if   p == "phone":  show_phone_panel()
+    elif p == "email":  show_email_panel()
+    elif p == "social": show_social_panel()
+    elif p == "domain": show_domain_panel()
+    elif p == "image":  show_image_panel()
+    else:
+        st.markdown("<div style='text-align:center;color:#8b949e;padding:2rem;font-size:1.1rem'>👆 Wähle eine Kategorie aus der Seitenleiste oder klicke auf einen Knoten</div>", unsafe_allow_html=True)
