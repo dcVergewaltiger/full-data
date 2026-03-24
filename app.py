@@ -10,24 +10,34 @@ from fpdf import FPDF
 import datetime
 
 # --- PDF GENERATOR ---
+def _safe_text(text, max_len=180):
+    """Text auf latin-1 bereinigen, Sonderzeichen ersetzen und Länge begrenzen."""
+    text = str(text)
+    text = text.encode("latin-1", "replace").decode("latin-1")
+    if len(text) > max_len:
+        text = text[:max_len] + "..."
+    return text
+
 def create_pdf(report_data, title="OSINT Recherche Bericht"):
     pdf = FPDF()
     pdf.add_page()
+    pdf.set_margins(15, 15, 15)
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(200, 10, txt=title, ln=True, align="C")
+    pdf.cell(0, 10, txt=_safe_text(title, 80), ln=True, align="C")
     pdf.set_font("Arial", "", 10)
-    pdf.cell(200, 10, txt=f"Erstellt am: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M:%S')}", ln=True, align="C")
+    pdf.cell(0, 10, txt=f"Erstellt am: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M:%S')}", ln=True, align="C")
     pdf.ln(10)
     for section, data in report_data.items():
         pdf.set_font("Arial", "B", 12)
-        pdf.cell(200, 10, txt=section.upper(), ln=True)
-        pdf.set_font("Arial", "", 10)
+        pdf.cell(0, 10, txt=_safe_text(str(section).upper(), 80), ln=True)
+        pdf.set_font("Arial", "", 9)
         if isinstance(data, dict):
             for k, v in data.items():
-                pdf.multi_cell(0, 8, txt=f"{k}: {v}")
+                line = _safe_text(f"{k}: {v}", 200)
+                pdf.multi_cell(0, 7, txt=line)
         else:
-            pdf.multi_cell(0, 8, txt=str(data))
-        pdf.ln(5)
+            pdf.multi_cell(0, 7, txt=_safe_text(str(data), 500))
+        pdf.ln(4)
     result = pdf.output(dest="S")
     if isinstance(result, bytes):
         return result
