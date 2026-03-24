@@ -172,6 +172,27 @@ update(root);
 </script></body></html>"""
     components.html(html, height=600, scrolling=False)
 
+# --- HILFSFUNKTION: Tabelle mit klickbaren Links ---
+def link_table(data: dict, col1="Kategorie", col2="Link / Wert"):
+    """Rendert ein dict als HTML-Tabelle mit klickbaren Links."""
+    rows = ""
+    for k, v in data.items():
+        v_str = str(v)
+        if v_str.startswith("http"):
+            cell = f'<a href="{v_str}" target="_blank" style="color:#58a6ff;text-decoration:none">{v_str}</a>'
+        else:
+            cell = v_str
+        rows += f"<tr><td style='padding:6px 12px;border-bottom:1px solid #30363d;color:#8b949e;white-space:nowrap'>{k}</td><td style='padding:6px 12px;border-bottom:1px solid #30363d;color:#e6edf3;word-break:break-all'>{cell}</td></tr>"
+    html = f"""
+    <table style='width:100%;border-collapse:collapse;background:#161b22;border-radius:8px;overflow:hidden'>
+      <thead><tr>
+        <th style='padding:8px 12px;background:#21262d;color:#58a6ff;text-align:left'>{col1}</th>
+        <th style='padding:8px 12px;background:#21262d;color:#58a6ff;text-align:left'>{col2}</th>
+      </tr></thead>
+      <tbody>{rows}</tbody>
+    </table>"""
+    st.markdown(html, unsafe_allow_html=True)
+
 # --- TOOL PANELS ---
 def show_phone_panel():
     st.markdown("### 📱 Telefon & Nummer")
@@ -179,7 +200,7 @@ def show_phone_panel():
     if st.button("🔍 Analysieren", key="phone_go"):
         with st.spinner("Läuft..."):
             d = lookup_phone(phone)
-            st.table(pd.DataFrame(d.items(), columns=["Info","Wert"]))
+            link_table(d, "Info", "Wert / Link")
             pdf = create_pdf(d, f"Telefon Bericht: {phone}")
             st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Phone_{phone}.pdf", key="phone_pdf")
 
@@ -191,9 +212,10 @@ def show_email_panel():
             e = check_account_existence(email)
             b = check_breaches(email)
             st.subheader("Account-Existenz")
-            st.table(pd.DataFrame(e.items(), columns=["Dienst","Status"]))
+            link_table(e, "Dienst", "Link")
+            st.markdown("<br>", unsafe_allow_html=True)
             st.subheader("Datenlecks")
-            st.table(pd.DataFrame(b.items(), columns=["Quelle","Link"]))
+            link_table(b, "Quelle", "Link")
             pdf = create_pdf({**e,**b}, f"Email Bericht: {email}")
             st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Email_{email}.pdf", key="email_pdf")
 
@@ -205,7 +227,7 @@ def show_social_panel():
         if st.button("🔍 Suchen", key="u_go"):
             with st.spinner("Läuft..."):
                 r = check_social_media(u)
-                st.table(pd.DataFrame(r.items(), columns=["Plattform","Ergebnis"]))
+                link_table(r, "Plattform", "Ergebnis / Link")
                 pdf = create_pdf(r, f"Social Bericht: {u}")
                 st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Social_{u}.pdf", key="u_pdf")
     with t2:
@@ -213,7 +235,7 @@ def show_social_panel():
         if st.button("🔍 Suchen", key="n_go"):
             with st.spinner("Läuft..."):
                 r = search_real_name(n)
-                st.table(pd.DataFrame(r.items(), columns=["Quelle","Link"]))
+                link_table(r, "Quelle", "Link")
                 pdf = create_pdf(r, f"Namens Bericht: {n}")
                 st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Name_{n}.pdf", key="n_pdf")
     with t3:
@@ -221,7 +243,7 @@ def show_social_panel():
         if st.button("🔍 Lookup", key="d_go"):
             with st.spinner("Läuft..."):
                 r = lookup_discord_id(d)
-                st.table(pd.DataFrame(r.items(), columns=["Service","Link"]))
+                link_table(r, "Service", "Link")
                 pdf = create_pdf(r, f"Discord Bericht: {d}")
                 st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Discord_{d}.pdf", key="d_pdf")
 
@@ -273,7 +295,7 @@ def show_vpn_panel():
                 st.error("🚨 VPN / Proxy erkannt!")
             else:
                 st.success("✅ Kein VPN/Proxy erkannt")
-            st.table(pd.DataFrame(result.items(), columns=["Eigenschaft","Wert"]))
+            link_table(result, "Eigenschaft", "Wert")
             pdf = create_pdf(result, f"VPN-Analyse: {ip}")
             st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_VPN_{ip}.pdf", key="vpn_pdf")
 
@@ -294,11 +316,12 @@ def show_pwfind_panel():
             if leak_funds:
                 st.error(f"🚨 {len(leak_funds)} Passwort-Einträge in Leaks gefunden!")
                 st.subheader("Gefundene Einträge")
-                st.table(pd.DataFrame(leak_funds.items(), columns=["Fund","Details"]))
+                link_table(leak_funds, "Fund", "Details")
+                st.markdown("<br>", unsafe_allow_html=True)
             else:
                 st.info("ℹ️ Keine direkten Treffer über automatische API. Manuelle Suche empfohlen.")
             st.subheader("🔗 Such-Links (manuell prüfen)")
-            st.table(pd.DataFrame(links.items(), columns=["Dienst","Link"]))
+            link_table(links, "Dienst", "Link")
             pdf = create_pdf(result, f"Passwort-Finder: {email}")
             st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_PW_{email}.pdf", key="pw_pdf")
 
