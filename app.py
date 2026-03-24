@@ -504,6 +504,134 @@ def show_spam_panel():
         pdf = create_pdf(result, f"Spam-Score: {phone}")
         st.download_button("📄 PDF", data=pdf, file_name=f"OSINT_Spam_{phone}.pdf", key="sp_pdf")
 
+# --- KI CHAT ---
+def show_chat_page():
+    st.markdown("### 💬 OSINT KI-Assistent")
+    st.markdown("""
+    <div style='background:#161b22;border:1px solid #388bfd;border-radius:8px;padding:12px 16px;margin-bottom:1rem;color:#8b949e;font-size:.9rem'>
+    🤖 Stelle Fragen zu OSINT-Techniken, Recherche-Methoden oder lass dir Ergebnisse erklären.
+    </div>
+    """, unsafe_allow_html=True)
+    import os
+    from openai import OpenAI
+    client = OpenAI()
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = [
+            {"role": "system", "content": "Du bist ein OSINT-Experte und hilfst bei der Recherche von öffentlich verfügbaren Informationen. Du erklärst Techniken, Tools und Methoden. Antworte immer auf Deutsch und halte dich an legale, ethische OSINT-Methoden."}
+        ]
+    for msg in st.session_state.chat_history[1:]:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+    user_input = st.chat_input("Frage stellen...")
+    if user_input:
+        st.session_state.chat_history.append({"role": "user", "content": user_input})
+        with st.chat_message("user"):
+            st.markdown(user_input)
+        with st.chat_message("assistant"):
+            with st.spinner("Denke nach..."):
+                try:
+                    resp = client.chat.completions.create(
+                        model="gpt-4.1-mini",
+                        messages=st.session_state.chat_history,
+                        max_tokens=800
+                    )
+                    answer = resp.choices[0].message.content
+                except Exception as e:
+                    answer = f"Fehler: {e}"
+                st.markdown(answer)
+                st.session_state.chat_history.append({"role": "assistant", "content": answer})
+    if st.button("🗑️ Chat leeren"):
+        st.session_state.chat_history = st.session_state.chat_history[:1]
+        st.rerun()
+
+# --- NEWS ---
+def show_news_page():
+    import requests as _req
+    st.markdown("### 📰 Cybersecurity & Datenleck News")
+    feeds = [
+        ("Bleeping Computer",  "https://www.bleepingcomputer.com/feed/"),
+        ("Krebs on Security",  "https://krebsonsecurity.com/feed/"),
+        ("The Hacker News",    "https://feeds.feedburner.com/TheHackersNews"),
+        ("Heise Security",     "https://www.heise.de/security/rss/news-atom.xml"),
+        ("Have I Been Pwned",  "https://feeds.feedburner.com/HaveIBeenPwned"),
+    ]
+    tab_labels = [f[0] for f in feeds]
+    tabs = st.tabs(tab_labels)
+    for tab, (name, url) in zip(tabs, feeds):
+        with tab:
+            try:
+                import xml.etree.ElementTree as ET
+                r = _req.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+                root = ET.fromstring(r.content)
+                ns = {"atom": "http://www.w3.org/2005/Atom"}
+                items = root.findall(".//item") or root.findall(".//atom:entry", ns)
+                count = 0
+                for item in items[:10]:
+                    title_el = item.find("title") or item.find("atom:title", ns)
+                    link_el  = item.find("link")  or item.find("atom:link", ns)
+                    desc_el  = item.find("description") or item.find("atom:summary", ns)
+                    if title_el is None:
+                        continue
+                    title_txt = title_el.text or ""
+                    link_txt  = (link_el.text or link_el.get("href", "")) if link_el is not None else ""
+                    desc_txt  = (desc_el.text or "")[:200] if desc_el is not None else ""
+                    import re
+                    desc_txt = re.sub(r"<[^>]+>", "", desc_txt)
+                    st.markdown(f"""<div style='background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px 16px;margin-bottom:.7rem'>
+                    <a href='{link_txt}' target='_blank' style='color:#58a6ff;font-weight:bold;text-decoration:none;font-size:1rem'>{title_txt}</a>
+                    <p style='color:#8b949e;font-size:.85rem;margin:.4rem 0 0'>{desc_txt}...</p>
+                    </div>""", unsafe_allow_html=True)
+                    count += 1
+                if count == 0:
+                    st.info("Keine Artikel gefunden.")
+            except Exception as e:
+                st.error(f"Feed konnte nicht geladen werden: {e}")
+
+# --- UMFRAGEN ---
+def show_polls_page():
+    st.markdown("### 📊 Community Umfragen")
+    if "poll_votes" not in st.session_state:
+        st.session_state.poll_votes = {}
+    polls = [
+        {
+            "id": "p1",
+            "frage": "🔍 Welches OSINT-Tool nutzt du am häufigsten?",
+            "optionen": ["Sherlock", "Maltego", "OSINT Framework", "theHarvester", "Shodan"]
+        },
+        {
+            "id": "p2",
+            "frage": "🛡️ Wie schützt du deine eigene Online-Privatsphäre?",
+            "optionen": ["VPN", "Tor Browser", "Fake-Accounts", "Nichts davon", "Mehreres kombiniert"]
+        },
+        {
+            "id": "p3",
+            "frage": "📊 Wie oft nutzt du OSINT-Tools?",
+            "optionen": ["Täglich", "Wöchentlich", "Monatlich", "Selten"]
+        },
+        {
+            "id": "p4",
+            "frage": "💡 Welche neue Funktion würdest du dir wünschen?",
+            "optionen": ["Darknet-Suche", "Gesichtserkennung", "Auto-Bericht", "Mehr Leak-Daten", "Mobile App"]
+        },
+    ]
+    cols = st.columns(2)
+    for i, poll in enumerate(polls):
+        with cols[i % 2]:
+            st.markdown(f"<div style='background:#161b22;border:1px solid #30363d;border-radius:10px;padding:16px;margin-bottom:1rem'>", unsafe_allow_html=True)
+            st.markdown(f"**{poll['frage']}**")
+            voted = st.session_state.poll_votes.get(poll["id"])
+            if voted is None:
+                choice = st.radio("", poll["optionen"], key=f"poll_{poll['id']}", label_visibility="collapsed")
+                if st.button("✅ Abstimmen", key=f"vote_{poll['id']}"):
+                    st.session_state.poll_votes[poll["id"]] = choice
+                    st.rerun()
+            else:
+                st.success(f"Deine Stimme: **{voted}**")
+                if st.button("🔄 Erneut abstimmen", key=f"revote_{poll['id']}"):
+                    del st.session_state.poll_votes[poll["id"]]
+                    st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+
 # --- HAUPT APP ---
 if check_password():
     st.markdown("""
@@ -520,59 +648,97 @@ if check_password():
     </style>
     """, unsafe_allow_html=True)
 
-    st.markdown("""
-    <div style='text-align:center;padding:1rem 0 .3rem'>
-      <h1 style='color:#58a6ff;font-size:2.2rem;letter-spacing:3px'>🔍 FULL DATA</h1>
-      <p style='color:#8b949e;font-size:.9rem'>Klicke auf einen Knoten oder wähle links eine Kategorie</p>
-    </div><hr>
-    """, unsafe_allow_html=True)
-
+    if "page" not in st.session_state:
+        st.session_state.page = "kategorien"
     if "panel" not in st.session_state:
         st.session_state.panel = None
 
-    st.sidebar.markdown("## 🗂️ Kategorien")
-    for label, key in [
-        ("📱 Telefon & Nummer","phone"),
-        ("📞 Spam-Score","spam"),
-        ("📧 E-Mail & Accounts","email"),
-        ("🔑 Passwort-Finder","pwfind"),
-        ("👤 Social & Namen","social"),
-        ("🔎 Sherlock","sherlock"),
-        ("🌐 Domain & IP","domain"),
-        ("📡 IP-Netzwerk-Scan","ipscan"),
-        ("🛡️ VPN-Breaker","vpn"),
-        ("📸 Bild & Metadaten","image"),
-        ("🖼️ Reverse Image","revimg"),
-        ("🔍 Dork Generator","dork"),
-        ("₿ Crypto Wallet","crypto"),
-        ("🐙 GitHub OSINT","github"),
-        ("📍 Adress-Lookup","address"),
-    ]:
-        if st.sidebar.button(label, key=f"sb_{key}"):
-            st.session_state.panel = key
+    # --- HAUPTNAVIGATION ---
+    st.sidebar.markdown("""
+    <div style='text-align:center;padding:.5rem 0 1rem'>
+      <span style='color:#58a6ff;font-size:1.3rem;font-weight:bold;letter-spacing:2px'>🔍 FULL DATA</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    nav_items = [
+        ("🔍 Kategorien", "kategorien"),
+        ("💬 KI-Chat",     "chat"),
+        ("📰 News",        "news"),
+        ("📊 Umfragen",    "umfragen"),
+    ]
+    for label, key in nav_items:
+        active = st.session_state.page == key
+        style = "background:#388bfd;color:#fff;" if active else ""
+        if st.sidebar.button(label, key=f"nav_{key}", use_container_width=True):
+            st.session_state.page = key
+            st.session_state.panel = None
+            st.rerun()
+
     st.sidebar.markdown("---")
-    if st.sidebar.button("🚪 Ausloggen"):
+
+    # --- KATEGORIEN SIDEBAR ---
+    if st.session_state.page == "kategorien":
+        st.sidebar.markdown("**🗂️ Tools**")
+        for label, key in [
+            ("📱 Telefon & Nummer","phone"),
+            ("📞 Spam-Score","spam"),
+            ("📧 E-Mail & Accounts","email"),
+            ("🔑 Passwort-Finder","pwfind"),
+            ("👤 Social & Namen","social"),
+            ("🔎 Sherlock","sherlock"),
+            ("🌐 Domain & IP","domain"),
+            ("📡 IP-Netzwerk-Scan","ipscan"),
+            ("🛡️ VPN-Breaker","vpn"),
+            ("📸 Bild & Metadaten","image"),
+            ("🖼️ Reverse Image","revimg"),
+            ("🔍 Dork Generator","dork"),
+            ("₿ Crypto Wallet","crypto"),
+            ("🐙 GitHub OSINT","github"),
+            ("📍 Adress-Lookup","address"),
+        ]:
+            if st.sidebar.button(label, key=f"sb_{key}", use_container_width=True):
+                st.session_state.panel = key
+        st.sidebar.markdown("")
+
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🚪 Ausloggen", use_container_width=True):
         st.session_state.password_correct = False
         st.rerun()
 
-    render_mindmap()
-    st.markdown("<hr>", unsafe_allow_html=True)
+    # --- SEITENANZEIGE ---
+    pg = st.session_state.page
 
-    p = st.session_state.panel
-    if   p == "phone":    show_phone_panel()
-    elif p == "email":    show_email_panel()
-    elif p == "social":   show_social_panel()
-    elif p == "domain":   show_domain_panel()
-    elif p == "image":    show_image_panel()
-    elif p == "vpn":      show_vpn_panel()
-    elif p == "pwfind":   show_pwfind_panel()
-    elif p == "sherlock": show_sherlock_panel()
-    elif p == "dork":     show_dork_panel()
-    elif p == "revimg":   show_revimg_panel()
-    elif p == "crypto":   show_crypto_panel()
-    elif p == "github":   show_github_panel()
-    elif p == "ipscan":   show_ipscan_panel()
-    elif p == "address":  show_address_panel()
-    elif p == "spam":     show_spam_panel()
+    if pg == "chat":
+        show_chat_page()
+    elif pg == "news":
+        show_news_page()
+    elif pg == "umfragen":
+        show_polls_page()
     else:
-        st.markdown("<div style='text-align:center;color:#8b949e;padding:2rem;font-size:1.1rem'>👆 Wähle eine Kategorie aus der Seitenleiste oder klicke auf einen Knoten</div>", unsafe_allow_html=True)
+        # Kategorien-Seite
+        st.markdown("""
+        <div style='text-align:center;padding:1rem 0 .3rem'>
+          <h1 style='color:#58a6ff;font-size:2.2rem;letter-spacing:3px'>🔍 FULL DATA</h1>
+          <p style='color:#8b949e;font-size:.9rem'>Klicke auf einen Knoten oder wähle links eine Kategorie</p>
+        </div><hr>
+        """, unsafe_allow_html=True)
+        render_mindmap()
+        st.markdown("<hr>", unsafe_allow_html=True)
+        p = st.session_state.panel
+        if   p == "phone":    show_phone_panel()
+        elif p == "email":    show_email_panel()
+        elif p == "social":   show_social_panel()
+        elif p == "domain":   show_domain_panel()
+        elif p == "image":    show_image_panel()
+        elif p == "vpn":      show_vpn_panel()
+        elif p == "pwfind":   show_pwfind_panel()
+        elif p == "sherlock": show_sherlock_panel()
+        elif p == "dork":     show_dork_panel()
+        elif p == "revimg":   show_revimg_panel()
+        elif p == "crypto":   show_crypto_panel()
+        elif p == "github":   show_github_panel()
+        elif p == "ipscan":   show_ipscan_panel()
+        elif p == "address":  show_address_panel()
+        elif p == "spam":     show_spam_panel()
+        else:
+            st.markdown("<div style='text-align:center;color:#8b949e;padding:2rem;font-size:1.1rem'>👆 Wähle eine Kategorie aus der Seitenleiste oder klicke auf einen Knoten</div>", unsafe_allow_html=True)
